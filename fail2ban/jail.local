@@ -1,0 +1,106 @@
+# rairu-kun MOD - Fail2ban Config
+# Auto-ban brute force on SSH, bot webhooks, API endpoints
+
+# ============================================================
+# JAIL DEFAULTS
+# ============================================================
+[DEFAULT]
+# Ban time: 1 hour
+bantime = 3600
+# Find time: 10 minutes
+findtime = 600
+# Max retries before ban
+maxretry = 5
+# Backend
+backend = systemd
+# Ignore local IPs
+ignoreip = 127.0.0.1/8 10.0.0.0/8 172.16.0.0/12 192.168.0.0/16
+# Action
+action = iptables-multiport[name=%(__name__)s, port="http,https,ssh", protocol=tcp]
+           sendmail-whois[name=%(__name__)s, dest=root@localhost, sender=fail2ban@localhost]
+
+# ============================================================
+# SSH JAIL
+# ============================================================
+[sshd]
+enabled = true
+port = ssh
+filter = sshd
+logpath = /var/log/auth.log
+maxretry = 3
+bantime = 86400
+findtime = 600
+
+# ============================================================
+# NGINX JAILS
+# ============================================================
+[nginx-http-auth]
+enabled = true
+port = http,https
+filter = nginx-http-auth
+logpath = /var/log/nginx/error.log
+maxretry = 3
+
+[nginx-limit-req]
+enabled = true
+port = http,https
+filter = nginx-limit-req
+logpath = /var/log/nginx/error.log
+maxretry = 10
+findtime = 60
+
+[nginx-bot-login]
+enabled = true
+port = http,https
+filter = nginx-bot-login
+logpath = /var/log/nginx/access.log
+maxretry = 5
+findtime = 300
+
+[nginx-bot-api]
+enabled = true
+port = http,https
+filter = nginx-bot-api
+logpath = /var/log/nginx/access.log
+maxretry = 20
+findtime = 60
+
+[nginx-bot-webhook]
+enabled = true
+port = http,https
+filter = nginx-bot-webhook
+logpath = /var/log/nginx/access.log
+maxretry = 50
+findtime = 60
+
+# ============================================================
+# CUSTOM FILTERS
+# ============================================================
+# Save these as separate files in /etc/fail2ban/filter.d/
+
+# nginx-bot-login.conf
+# [Definition]
+# failregex = ^<HOST> -.*"(GET|POST) /admin/.*" 401
+#             ^<HOST> -.*"(GET|POST) /bot2/.*" 401
+# ignoreregex =
+
+# nginx-bot-api.conf
+# [Definition]
+# failregex = ^<HOST> -.*"(GET|POST) /api/.*" (401|403|429)
+#             ^<HOST> -.*"(POST) /bot2/api/exec.*" (401|403)
+# ignoreregex = ignoreregex =
+
+# nginx-bot-webhook.conf
+# [Definition]
+# failregex = ^<HOST> -.*"POST /bot1/.*" (403|429|500)
+# ignoreregex =
+
+# ============================================================
+# RECIDIVE JAIL - Repeat offenders
+# ============================================================
+[recidive]
+enabled = true
+logpath = /var/log/fail2ban.log
+bantime = 604800  # 1 week
+findtime = 86400  # 1 day
+maxretry = 3

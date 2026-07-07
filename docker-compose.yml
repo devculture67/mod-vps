@@ -10,7 +10,7 @@ services:
         BORE_SERVER: ${BORE_SERVER:-bore.pub}
         BORE_PORT: ${BORE_PORT:-3977}
         REGION: ${REGION:-ap}
-        BOT_PASSWORD: ${BOT_PASSWORD:-rairukun2025}
+        BOT_PASSWORD: ${BOT_PASSWORD
     container_name: rairu-kun-mod
     restart: unless-stopped
     privileged: true
@@ -26,23 +26,66 @@ services:
       - BOT_PASSWORD=${BOT_PASSWORD:-rairukun2025}
       - BOT_TOKEN_1=${BOT_TOKEN_1}
       - BOT_TOKEN_2=${BOT_TOKEN_2}
+      - BOT_TOKEN_3=${BOT_TOKEN_3}
+      - BOT_TOKEN_4=${BOT_TOKEN_4}
       - WEBHOOK_URL_1=${WEBHOOK_URL_1}
       - WEBHOOK_URL_2=${WEBHOOK_URL_2}
+      - WEBHOOK_URL_3=${WEBHOOK_URL_3}
+      - WEBHOOK_URL_4=${WEBHOOK_URL_4}
+      - AUTHORIZED_USERS=${AUTHORIZED_USERS}
     ports:
-      - "2222:22"      # SSH (local only, main access via bore)
-      - "5000:5000"    # Bot 1 webhook
-      - "5001:5001"    # Bot 2 webhook
-      - "8080:8080"    # Admin panel
-      - "8888:8888"    # API Gateway
+      # Core (local only, main access via bore)
+      - "2222:22"      # SSH
+      # Web
+      - "80:80"        # HTTP (redirect)
+      - "443:443"      # HTTPS
+      # Bot webhooks
+      - "5000:5000"    # Bot 1 Webhook
+      - "5001:5001"    # Bot 2 API
+      - "5002:5002"    # Bot 3 File Manager
+      - "5003:5003"    # Bot 4 System Control
+      # API & Admin
+      - "8080:8080"    # Admin Panel
+      - "8888:8888"    # Webhook Manager / API Gateway
       - "9000:9000"    # Extra service
+      # Monitoring
+      - "9090:9090"    # Prometheus
+      - "3000:3000"    # Grafana
     volumes:
       - ./data:/data
       - ./logs:/var/log
       - ./bots:/opt/bots
+      - ./nginx:/etc/nginx:ro
+      - ./prometheus:/etc/prometheus:ro
+      - ./grafana:/etc/grafana/provisioning:ro
+      - ./fail2ban:/etc/fail2ban:ro
     tmpfs:
       - /run
       - /run/lock
-    # Needed for systemd
-    cgroupns: host
     security_opt:
       - seccomp:unconfined
+
+  # Optional: Standalone exporters (if not in main container)
+  node-exporter:
+    image: prom/node-exporter:latest
+    container_name: rairu-node-exporter
+    restart: unless-stopped
+    ports:
+      - "9100:9100"
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/rootfs:ro
+    command:
+      - '--path.procfs=/host/proc'
+      - '--path.sysfs=/host/sys'
+      - '--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)'
+
+  nginx-exporter:
+    image: nginx/nginx-prometheus-exporter:latest
+    container_name: rairu-nginx-exporter
+    restart: unless-stopped
+    ports:
+      - "9113:9113"
+    environment:
+      - NGINX_SCRAPE_URI=http://rairu-kun:8080/stub_status

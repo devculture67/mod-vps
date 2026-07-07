@@ -1,0 +1,159 @@
+{
+  "dashboards": [
+    {
+      "title": "System Overview",
+      "panels": [
+        {
+          "title": "CPU Usage",
+          "type": "graph",
+          "targets": [
+            {
+              "expr": "100 - (avg by (instance) (irate(node_cpu_seconds_total{mode=\"idle\"}[5m])) * 100)",
+              "legendFormat": "CPU %"
+            }
+          ]
+        },
+        {
+          "title": "Memory Usage",
+          "type": "graph",
+          "targets": [
+            {
+              "expr": "(node_memory_MemTotal_bytes - node_memory_MemAvailable_bytes) / node_memory_MemTotal_bytes * 100",
+              "legendFormat": "Memory %"
+            }
+          ]
+        },
+        {
+          "title": "Disk Usage",
+          "type": "graph",
+          "targets": [
+            {
+              "expr": "(node_filesystem_size_bytes - node_filesystem_free_bytes) / node_filesystem_size_bytes * 100",
+              "legendFormat": "Disk %"
+            }
+          ]
+        },
+        {
+          "title": "Network I/O",
+          "type": "graph",
+          "targets": [
+            {
+              "expr": "rate(node_network_receive_bytes_total[5m])",
+              "legendFormat": "RX {{device}}"
+            },
+            {
+              "expr": "rate(node_network_transmit_bytes_total[5m])",
+              "legendFormat": "TX {{device}}"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "title": "Bot Services",
+      "panels": [
+        {
+          "title": "Bot 1 - Webhook Requests",
+          "type": "graph",
+          "targets": [
+            {
+              "expr": "rate(http_requests_total{job=\"bot1\"}[5m])",
+              "legendFormat": "{{method}} {{path}}"
+            }
+          ]
+        },
+        {
+          "title": "Bot 1 - Active Webhooks",
+          "type": "stat",
+          "targets": [
+            {
+              "expr": "sum(bot1_active_webhooks)",
+              "legendFormat": "Active"
+            }
+          ]
+        },
+        {
+          "title": "Bot 2 - API Requests",
+          "type": "graph",
+          "targets": [
+            {
+              "expr": "rate(http_requests_total{job=\"bot2\"}[5m])",
+              "legendFormat": "{{method}} {{endpoint}}"
+            }
+          ]
+        },
+        {
+          "title": "Bot 2 - Exec Commands",
+          "type": "graph",
+          "targets": [
+            {
+              "expr": "rate(bot2_exec_commands_total[5m])",
+              "legendFormat": "Commands/min"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "title": "Tunnels & Network",
+      "panels": [
+        {
+          "title": "Bore Tunnel Status",
+          "type": "table",
+          "targets": [
+            {
+              "expr": "bore_tunnel_up",
+              "format": "table",
+              "legendFormat": "{{name}}"
+            }
+          ]
+        },
+        {
+          "title": "SSH Connections",
+          "type": "graph",
+          "targets": [
+            {
+              "expr": "sshd_active_connections",
+              "legendFormat": "Active SSH"
+            }
+          ]
+        },
+        {
+          "title": "Nginx Requests",
+          "type": "graph",
+          "targets": [
+            {
+              "expr": "rate(nginx_http_requests_total[5m])",
+              "legendFormat": "{{status}}"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "title": "Security (Fail2ban)",
+      "panels": [
+        {
+          "title": "Banned IPs",
+          "type": "stat",
+          "targets": [
+            {
+              "expr": "fail2ban_banned_total",
+              "legendFormat": "Banned"
+            }
+          ]
+        },
+        {
+          "title": "Ban Actions",
+          "type": "graph",
+          "targets": [
+            {
+              "expr": "rate(fail2ban_actions_total[5m])",
+              "legendFormat": "{{jail}}"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

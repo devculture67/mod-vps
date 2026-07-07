@@ -1,0 +1,92 @@
+# rairu-kun MOD - Prometheus Config
+# Scrapes metrics from all services
+
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    cluster: 'rairu-kun-mod'
+    environment: 'production'
+
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: []
+
+rule_files: []
+
+scrape_configs:
+  # Prometheus itself
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+
+  # Node Exporter - system metrics
+  - job_name: 'node-exporter'
+    static_configs:
+      - targets: ['localhost:9100']
+
+  # Nginx - web server metrics
+  - job_name: 'nginx'
+    static_configs:
+      - targets: ['localhost:9113']
+
+  # SSH - connection metrics
+  - job_name: 'ssh'
+    static_configs:
+      - targets: ['localhost:9122']
+
+  # Bot 1 - Telegram webhook metrics
+  - job_name: 'bot1'
+    metrics_path: '/metrics'
+    static_configs:
+      - targets: ['localhost:5000']
+
+  # Bot 2 - HTTP API metrics
+  - job_name: 'bot2'
+    metrics_path: '/metrics'
+    static_configs:
+      - targets: ['localhost:5001']
+
+  # Admin Panel metrics
+  - job_name: 'admin'
+    metrics_path: '/metrics'
+    static_configs:
+      - targets: ['localhost:8080']
+
+  # API Gateway metrics
+  - job_name: 'api-gateway'
+    metrics_path: '/metrics'
+    static_configs:
+      - targets: ['localhost:8888']
+
+  # Bore tunnels - custom exporter
+  - job_name: 'bore-tunnels'
+    metrics_path: '/metrics'
+    static_configs:
+      - targets: ['localhost:9091']
+
+  # Docker - container metrics
+  - job_name: 'docker'
+    static_configs:
+      - targets: ['localhost:9323']
+
+  # Blackbox - endpoint probing
+  - job_name: 'blackbox'
+    metrics_path: /probe
+    params:
+      module: [http_2xx]
+    static_configs:
+      - targets:
+          - https://localhost/health
+          - https://localhost/bot1/health
+          - https://localhost/bot2/health
+          - https://localhost/admin/health
+          - https://localhost/api/health
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: __param_target
+      - source_labels: [__param_target]
+        target_label: instance
+      - target_label: __address__
+        replacement: localhost:9115
