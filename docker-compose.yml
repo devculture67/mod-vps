@@ -1,0 +1,48 @@
+version: '3.8'
+
+services:
+  rairu-kun:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        BORE_TOKEN: ${BORE_TOKEN}
+        BORE_SERVER: ${BORE_SERVER:-bore.pub}
+        BORE_PORT: ${BORE_PORT:-3977}
+        REGION: ${REGION:-ap}
+        BOT_PASSWORD: ${BOT_PASSWORD:-rairukun2025}
+    container_name: rairu-kun-mod
+    restart: unless-stopped
+    privileged: true
+    cap_add:
+      - SYS_ADMIN
+      - CAP_DAC_OVERRIDE
+      - CAP_SYS_RESOURCE
+    environment:
+      - BORE_TOKEN=${BORE_TOKEN}
+      - BORE_SERVER=${BORE_SERVER:-bore.pub}
+      - BORE_PORT=${BORE_PORT:-3977}
+      - REGION=${REGION:-ap}
+      - BOT_PASSWORD=${BOT_PASSWORD:-rairukun2025}
+      - BOT_TOKEN_1=${BOT_TOKEN_1}
+      - BOT_TOKEN_2=${BOT_TOKEN_2}
+      - WEBHOOK_URL_1=${WEBHOOK_URL_1}
+      - WEBHOOK_URL_2=${WEBHOOK_URL_2}
+    ports:
+      - "2222:22"      # SSH (local only, main access via bore)
+      - "5000:5000"    # Bot 1 webhook
+      - "5001:5001"    # Bot 2 webhook
+      - "8080:8080"    # Admin panel
+      - "8888:8888"    # API Gateway
+      - "9000:9000"    # Extra service
+    volumes:
+      - ./data:/data
+      - ./logs:/var/log
+      - ./bots:/opt/bots
+    tmpfs:
+      - /run
+      - /run/lock
+    # Needed for systemd
+    cgroupns: host
+    security_opt:
+      - seccomp:unconfined

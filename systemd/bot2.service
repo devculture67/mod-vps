@@ -1,0 +1,18 @@
+[Unit]
+Description=rairu-kun Bot 2 (Webhook/API)
+After=network.target sshd.service
+Wants=network.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/opt/bots/examples
+ExecStart=/usr/bin/python3 /opt/bots/examples/bot2.py
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+Environment=BOT_TOKEN_2=your_token
+
+[Install]
+WantedBy=multi-user.target

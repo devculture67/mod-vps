@@ -1,0 +1,19 @@
+[Unit]
+Description=rairu-kun Bot 1 (Telegram Webhook)
+After=network.target sshd.service
+Wants=network.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/opt/bots/examples
+ExecStart=/usr/bin/python3 /opt/bots/examples/bot1.py
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+Environment=BOT_TOKEN_1=your_token
+Environment=BOT_PASSWORD=rairukun2025
+
+[Install]
+WantedBy=multi-user.target
