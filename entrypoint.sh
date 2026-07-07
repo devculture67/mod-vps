@@ -1,92 +1,100 @@
 #!/bin/bash
 # ============================================================
-# rairu-kun MOD Entrypoint
-# Starts: SSH, Nginx, Fail2ban, Prometheus, Grafana, Redis, Bore, Bots
+# rairu-kun MOD Entrypoint (Fixed for Railway)
 # ============================================================
 
-set -e
-
-echo "🚀 Starting rairu-kun MOD Full Stack..."
-
-# Setup environment
 export HOME=/root
 export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 
-# Create required directories
-mkdir -p /run/sshd /var/log/supervisor /var/log/bots /var/log/nginx /var/log/grafana /var/lib/prometheus /var/lib/grafana /data /var/www/certbot /etc/letsencrypt/live
+BOT_PASSWORD="${BOT_PASSWORD:-rairukun2025}"
+BORE_SERVER="${BORE_SERVER:-bore.pub}"
+NTFY_TOPIC="${NTFY_TOPIC:-dhcl48-vps}"
 
-# Generate self-signed cert for nginx (if no Let's Encrypt)
-if [ ! -f /etc/letsencrypt/live/example.com/fullchain.pem ]; then
-    mkdir -p /etc/letsencrypt/live/example.com
-    openssl req -x509 -nodes -newkey rsa:2048 -keyout /etc/letsencrypt/live/example.com/privkey.pem \
-        -out /etc/letsencrypt/live/example.com/fullchain.pem \
+echo "🚀 Starting rairu-kun MOD..."
+
+mkdir -p /run/sshd /var/log/supervisor /var/log/bots /var/log/nginx \
+         /data /var/www/html /var/run
+
+# Set root password at runtime (not at build time)
+echo "root:${BOT_PASSWORD}" | chpasswd
+echo "🔑 Password set"
+
+# Generate self-signed SSL cert
+if [ ! -f /etc/letsencrypt/live/localhost/fullchain.pem ]; then
+    mkdir -p /etc/letsencrypt/live/localhost
+    openssl req -x509 -nodes -newkey rsa:2048 \
+        -keyout /etc/letsencrypt/live/localhost/privkey.pem \
+        -out /etc/letsencrypt/live/localhost/fullchain.pem \
         -days 365 -subj "/CN=localhost" 2>/dev/null
+    echo "🔒 Self-signed cert generated"
 fi
 
-# Create htpasswd for nginx auth
-if [ ! -f /etc/nginx/.htpasswd ] && [ -n "$BOT_PASSWORD" ]; then
-    echo "admin:$(openssl passwd -apr1 "$BOT_PASSWORD")" > /etc/nginx/.htpasswd
+# Nginx htpasswd
+if [ ! -f /etc/nginx/.htpasswd ]; then
+    echo "admin:$(openssl passwd -apr1 "${BOT_PASSWORD}")" > /etc/nginx/.htpasswd
 fi
+
+# Nginx config fix for actual paths
+sed -i "s|/etc/letsencrypt/live/example.com|/etc/letsencrypt/live/localhost|g" \
+    /etc/nginx/sites-enabled/default 2>/dev/null || true
 
 # Start SSH
 echo "🔐 Starting SSH..."
 /usr/sbin/sshd
 
-# Start Nginx (test config first)
+# Test & start Nginx
 echo "🌐 Starting Nginx..."
-nginx -t && nginx
-
-# Start Fail2ban
-echo "🛡️ Starting Fail2ban..."
-fail2ban-server -f -b 2>/dev/null &
+nginx -t 2>/dev/null && nginx || echo "⚠️  Nginx failed, continuing..."
 
 # Start Redis
 echo "🔴 Starting Redis..."
-redis-server --daemonize yes 2>/dev/null &
+redis-server --daemonize yes --loglevel warning 2>/dev/null || true
 
-# Start Prometheus
-echo "📊 Starting Prometheus..."
-prometheus --config.file=/etc/prometheus/prometheus.yml --storage.tsdb.path=/var/lib/prometheus --web.enable-lifecycle > /var/log/supervisor/prometheus.log 2>&1 &
+# Start bore tunnels and capture SSH port
+echo "🔗 Starting Bore SSH tunnel..."
+bore local 22 --to "${BORE_SERVER}" > /tmp/bore_ssh.log 2>&1 &
+BORE_PID=$!
+sleep 4
 
-# Start Grafana
-echo "📈 Starting Grafana..."
-grafana-server --homepath=/usr/share/grafana cfg:default.paths.logs=/var/log/grafana cfg:default.paths.data=/var/lib/grafana > /var/log/supervisor/grafana.log 2>&1 &
-
-# Start Bore tunnels
-if [ -n "$BORE_TOKEN" ]; then
-    echo "🔗 Starting Bore tunnels..."
-    
-    ports=(22 80 443 5000 5001 5002 5003 8080 8888 9000)
-    for port in "${ports[@]}"; do
-        bore -s ${BORE_SERVER}:${BORE_PORT} -p ${port} --no-tls-verify 2>/dev/null &
-        sleep 0.3
-    done
-    
-    echo "✅ Bore tunnels started"
-else
-    echo "⚠️  BORE_TOKEN not set - skipping bore tunnels"
+SSH_PORT=$(grep -oP 'remote_port=\K[0-9]+' /tmp/bore_ssh.log 2>/dev/null | head -1)
+if [ -z "$SSH_PORT" ]; then
+    SSH_PORT=$(grep -oP 'listening at .*:\K[0-9]+' /tmp/bore_ssh.log 2>/dev/null | head -1)
 fi
 
-# Check if we can run systemd (needs --privileged)
-if [ -d /run/systemd/system ] && command -v systemctl >/dev/null 2>&1; then
-    echo "🔧 systemd detected - starting services..."
-    
-    systemctl daemon-reload 2>/dev/null || true
-    
-    for svc in ssh bore-tunnels bot1 bot2 bot3 bot4 webhook-manager monitoring nginx fail2ban prometheus grafana redis; do
-        if [ -f /etc/systemd/system/${svc}.service ]; then
-            systemctl enable ${svc} 2>/dev/null || true
-            systemctl start ${svc} 2>/dev/null || true
-            echo "   Started: ${svc}"
-        fi
-    done
-    
-    if systemctl is-system-running 2>/dev/null | grep -q "running\|degraded"; then
-        echo "✅ systemd running"
-        exec /sbin/init
-    fi
-fi
+echo ""
+echo "╔══════════════════════════════════════╗"
+echo "║       VPS SSH Connection Info        ║"
+echo "╠══════════════════════════════════════╣"
+echo "║  ssh root@${BORE_SERVER} -p ${SSH_PORT}"
+echo "║  Password: ${BOT_PASSWORD}"
+echo "╚══════════════════════════════════════╝"
+echo ""
 
-# Fallback to supervisord (recommended)
+# Start additional bore tunnels for web services
+bore local 80 --to "${BORE_SERVER}" > /tmp/bore_80.log 2>&1 &
+bore local 8080 --to "${BORE_SERVER}" > /tmp/bore_8080.log 2>&1 &
+bore local 8888 --to "${BORE_SERVER}" > /tmp/bore_8888.log 2>&1 &
+
+sleep 2
+
+PORT_80=$(grep -oP 'remote_port=\K[0-9]+|listening at .*:\K[0-9]+' /tmp/bore_80.log 2>/dev/null | head -1)
+PORT_8080=$(grep -oP 'remote_port=\K[0-9]+|listening at .*:\K[0-9]+' /tmp/bore_8080.log 2>/dev/null | head -1)
+PORT_8888=$(grep -oP 'remote_port=\K[0-9]+|listening at .*:\K[0-9]+' /tmp/bore_8888.log 2>/dev/null | head -1)
+
+# Send ntfy notification
+echo "📣 Sending ntfy notification..."
+curl -s -X POST "https://ntfy.sh/${NTFY_TOPIC}" \
+    -H "Title: 🚀 VPS Online - rairu-kun MOD" \
+    -H "Priority: high" \
+    -H "Tags: computer,rocket" \
+    -d "$(printf '✅ VPS Started!\n\n🔐 SSH:\nssh root@%s -p %s\nPassword: %s\n\n🌐 Web Ports:\nHTTP  → %s:%s\nAdmin → %s:%s\nAPI   → %s:%s\n\n⏰ Time: %s' \
+        "${BORE_SERVER}" "${SSH_PORT}" "${BOT_PASSWORD}" \
+        "${BORE_SERVER}" "${PORT_80}" \
+        "${BORE_SERVER}" "${PORT_8080}" \
+        "${BORE_SERVER}" "${PORT_8888}" \
+        "$(date '+%Y-%m-%d %H:%M:%S %Z')")" \
+    2>/dev/null && echo "✅ ntfy notification sent to ${NTFY_TOPIC}" || echo "⚠️  ntfy failed"
+
+# Start supervisord (manages all remaining services)
 echo "📦 Starting supervisord..."
-exec /usr/bin/supervisord -c /etc/supervisor/conf.d/supervisord.conf
+exec /usr/bin/supervisord -n -c /etc/supervisor/conf.d/supervisord.conf
